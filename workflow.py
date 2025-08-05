@@ -42,9 +42,9 @@ react_graph = builder.compile(checkpointer=memory)
 
 config = {'configurable': {'thread_id': '123'}}
 
-query = [HumanMessage(content='My name is bob')]
+query = [HumanMessage(content='Whats average age in data. data/titanic.csv')]
 query = react_graph.invoke({'messages': query}, config)
-query = [HumanMessage(content='what is my name?')]
+query = [HumanMessage(content='How parameter i asked correlates with death ratio')]
 query = react_graph.invoke({'messages': query}, config)
 
 for m in query['messages']:

@@ -7,3 +7,8 @@ Be concise and factual in your responses. If the data is missing or incomplete, 
 
 Avoid unnecessary explanations or friendly chatter. Prioritize clarity, precision, and data-driven insights.
 '''
+
+EXTRACTOR_PROMPT = '''
+You are an expert extraction algorithm. 
+Only extract relevant information from the text.
+'''

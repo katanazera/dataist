@@ -1,13 +1,51 @@
+import prompts
 import pandas as pd
-from typing import Annotated
+from pydantic import BaseModel, Field
+from typing import Annotated, Optional
+from dotenv import load_dotenv
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain.chat_models import init_chat_model
 
-CSV_PATH = 'data//titanic.csv'
 
-try:
+load_dotenv()
+
+CSV_PATH = ''
+
+def set_file_path_via_llm(user_message: str) -> str:
+    """
+    Extract the file path from the user's message. 
+    
+    This function should be called at the beginning of the conversation or when you have error failed to load CSV. 
+    The assistant should look for patterns like `file=...` or full absolute paths in the user's message 
+    and store the file path globally for all future tool calls.
+
+    Example: 'file=D:/testdata/mydata/titanic.csv'
+    """
+    global CSV_PATH
+
+    class FilePath(BaseModel):
+        '''Absolute file path from text'''
+        file_path: Optional[str] = Field(
+            default=None,
+            description="Absolute file path from user's query example: 'D:/testdata/mydata/titanic.csv'"
+        )
+    
+    llm = init_chat_model('gpt-4o-mini', model_provider='openai')
+    structured_llm = llm.with_structured_output(schema=FilePath)
+
+    result = structured_llm.invoke([
+        SystemMessage(content=prompts.EXTRACTOR_PROMPT),
+        HumanMessage(content=user_message)
+    ])
+
+    if result.file_path:
+        CSV_PATH = result.file_path
+
+    global df
+    
     df = pd.read_csv(CSV_PATH)
-except Exception as e:
-    df = pd.DataFrame()
-    print(f"[ERROR] Failed to load CSV: {e}")
+
+    return CSV_PATH
 
 
 def get_shape() -> str:
@@ -26,6 +64,7 @@ def get_columns() -> str:
 
 def get_dtypes() -> str:
     """returns data types of all columns."""
+    df = set_file_path_via_llm()
     if df.empty:
         return "Dataset is empty or failed to load."
     return "Data types:\n" + df.dtypes.to_string()
@@ -135,6 +174,7 @@ def get_correlation_between_columns(
     return f"Correlation between '{col1}' and '{col2}': {correlation:.4f}"
 
 tools = [
+    set_file_path_via_llm,
     get_shape,
     get_columns,
     get_dtypes,
