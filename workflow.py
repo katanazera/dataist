@@ -3,6 +3,7 @@ from langchain_core.messages import SystemMessage,HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import MessagesState, StateGraph, START
 from langgraph.prebuilt import tools_condition, ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 from tools import tools
 import prompts
 from IPython.display import display
@@ -36,10 +37,20 @@ builder.add_conditional_edges(
 )
 builder.add_edge('tools','assistant')
 
-react_graph = builder.compile()
+memory = MemorySaver()
+react_graph = builder.compile(checkpointer=memory)
 
-query = [HumanMessage(content='What is correlation between death/s and age?')]
-query = react_graph.invoke({'messages': query})
+config = {'configurable': {'thread_id': '123'}}
+
+query = [HumanMessage(content='My name is bob')]
+query = react_graph.invoke({'messages': query}, config)
+query = [HumanMessage(content='what is my name?')]
+query = react_graph.invoke({'messages': query}, config)
 
 for m in query['messages']:
     m.pretty_print()
+
+if __name__ == '__main__':
+    with open("assets/graph_llm.png", "wb") as f:
+        f.write(react_graph.get_graph(xray=True).draw_mermaid_png())
+    print('graph saved')
