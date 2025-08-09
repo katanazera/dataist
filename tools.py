@@ -1,3 +1,4 @@
+import json
 import prompts
 import pandas as pd
 from pydantic import BaseModel, Field
@@ -9,25 +10,29 @@ from langchain.chat_models import init_chat_model
 
 load_dotenv()
 
-CSV_PATH = ''
-
-def set_file_path_via_llm(user_message: str) -> str:
+def set_file_path_via_llm(user_message: str):
     """
     Extract the file path from the user's message. 
     
     This function should be called at the beginning of the conversation or when you have error failed to load CSV. 
     The assistant should look for patterns like `file=...` or full absolute paths in the user's message 
     and store the file path globally for all future tool calls.
+    Also there might be second description file as json, find it aswell.
 
-    Example: 'file=D:/testdata/mydata/titanic.csv'
+    Example: 'file=D:/testdata/mydata/titanic.csv','file=D:/testdata/mydata/data_description.json'
     """
-    global CSV_PATH
+    
+    CSV_PATH = ''
 
     class FilePath(BaseModel):
         '''Absolute file path from text'''
         file_path: Optional[str] = Field(
             default=None,
             description="Absolute file path from user's query example: 'D:/testdata/mydata/titanic.csv'"
+        )
+        file_description_path: Optional[str] = Field(
+            default=None,
+            description="Absolute file path from user's query to description json file: 'D:/testdata/mydata/data_description.json'"
         )
     
     llm = init_chat_model('gpt-4o-mini', model_provider='openai')
@@ -45,8 +50,11 @@ def set_file_path_via_llm(user_message: str) -> str:
     
     df = pd.read_csv(CSV_PATH)
 
+    if result.file_description_path:
+        with open(result.file_description_path,'r',encoding='utf-8') as f:
+            file_description = json.load(f)
+            return file_description
     return CSV_PATH
-
 
 def get_shape() -> str:
     """returns number of rows and columns in the dataset."""
