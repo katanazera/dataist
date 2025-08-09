@@ -42,11 +42,7 @@ react_graph = builder.compile(checkpointer=memory)
 
 config = {'configurable': {'thread_id': '123'}}
 
-query = [HumanMessage(content='Whats average age in data. data/titanic.csv, data/description.json')]
-query = react_graph.invoke({'messages': query}, config)
-query = [HumanMessage(content='How parameter i asked correlates with death ratio')]
-query = react_graph.invoke({'messages': query}, config)
-query = [HumanMessage(content='Do you know description of first 2 column, did you get it from file?')]
+query = [HumanMessage(content='give me deep analyz data/titanic.csv, data/description.json')]
 query = react_graph.invoke({'messages': query}, config)
 
 for m in query['messages']:

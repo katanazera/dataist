@@ -1,5 +1,7 @@
 import json
 import prompts
+import warnings
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field
 from typing import Annotated, Optional
@@ -181,6 +183,88 @@ def get_correlation_between_columns(
     correlation = df[col1].corr(df[col2])
     return f"Correlation between '{col1}' and '{col2}': {correlation:.4f}"
 
+def deep_data_analysis(file_path: str) -> str:
+    """
+    performs advanced data analysis: finds trends, anomalies, and hidden patterns. 
+    use ONLY if user asks for 'deep research', 'insights', or 'find something interesting'.
+    """
+    try:
+        df = pd.read_csv(file_path)
+        insights = []
+
+        #basic statistics
+        numeric_stats = df.describe(include=[np.number])
+        if not numeric_stats.empty:
+            insights.append("Basic Numeric Statistics:\n" + str(numeric_stats))
+        
+        #stats for categorical columns
+        cat_stats = df.describe(include=['object'])
+        if not cat_stats.empty:
+            insights.append("Categorical Data Summary:\n" + str(cat_stats))
+
+        #missing values analysis
+        missing = df.isnull().sum()
+        if missing.sum() > 0:
+            insights.append(f"Missing Values:\n{missing[missing > 0]}")
+
+        #anomaly detection (z-score method)
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        for col in numeric_cols:
+            if df[col].nunique() > 1:
+                z_scores = np.abs((df[col] - df[col].mean()) / df[col].std())
+                outliers = df[z_scores > 3]
+                if not outliers.empty:
+                    insights.append(f"Outliers in '{col}':\n{outliers[col].value_counts().head()}")
+
+        #correlation analysis
+        if len(numeric_cols) > 1:
+            try:
+                corr = df[numeric_cols].corr().stack().reset_index()
+                corr.columns = ['Variable 1', 'Variable 2', 'Correlation']
+                strong_corr = corr[(abs(corr['Correlation']) > 0.7) & 
+                                 (corr['Variable 1'] != corr['Variable 2'])]
+                if not strong_corr.empty:
+                    insights.append("Strong Correlations:\n" + strong_corr.to_string(index=False))
+            except Exception as e:
+                insights.append(f"Correlation analysis skipped: {str(e)}")
+
+        #time series analysis
+        date_cols = []
+        for col in df.columns:
+            for fmt in [None, '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y', '%Y%m%d']:
+                try:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        temp_series = pd.to_datetime(df[col], format=fmt, errors='coerce')
+                    if temp_series.notna().any():
+                        date_cols.append(col)
+                        df[col] = temp_series
+                        break
+                except:
+                    continue
+
+        for col in date_cols:
+            try:
+                monthly_stats = df.set_index(col).resample('ME').agg({
+                    c: 'mean' for c in numeric_cols
+                })
+                insights.append(f"Monthly Trends by '{col}'**:\n" + 
+                              monthly_stats.head().to_string())
+            except Exception as e:
+                insights.append(f"Could not analyze time trends for {col}: {str(e)}")
+
+        #categorical insights
+        cat_cols = df.select_dtypes(include=['object']).columns
+        for col in cat_cols:
+            if df[col].nunique() > 0:
+                top_values = df[col].value_counts().head(3)
+                insights.append(f"Top-3 Values in '{col}':\n{top_values}")
+
+        return "\n\n".join(insights) if insights else "No insights found"
+    
+    except Exception as e:
+        return f"Analysis failed: {str(e)}"
+
 tools = [
     set_file_path_via_llm,
     get_shape,
@@ -196,4 +280,5 @@ tools = [
     get_categorical_columns,
     get_top_values_each_column,
     get_correlation_between_columns,
+    deep_data_analysis,
 ]
