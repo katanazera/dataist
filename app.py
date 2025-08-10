@@ -5,8 +5,16 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 @cl.on_message
 async def on_message(msg: cl.Message):
+    user_session_id = cl.user_session.get("id")
+    thanks_action = cl.Action(
+        label="😎👍",
+        name="thanks_action",
+        payload={"user_session_id": user_session_id},
+        tooltip="Send thanks for the helpful reply"
+    )
+
     config = {"configurable": {"thread_id": cl.context.session.id}}
-    final_answer = cl.Message(content="")
+    final_answer = cl.Message(content="",actions=[thanks_action])
 
     for chunk, metadata in graph.stream(
         {"messages": [HumanMessage(content=msg.content)]},
@@ -24,6 +32,13 @@ async def on_message(msg: cl.Message):
                 for block in chunk.content:
                     if block.get("type") == "text":
                         await final_answer.stream_token(block["text"])
+    await final_answer.send()                    
+
+@cl.action_callback("thanks_action")
+async def on_action(action: cl.Action):
+    print("message id:", action.forId, "action payload:", action.payload)
+    await action.remove()
+    await cl.Message(content="You are awesome <3").send()
 
 @cl.set_chat_profiles
 async def chat_profile():
@@ -31,7 +46,7 @@ async def chat_profile():
         cl.ChatProfile(
             name="LangChain Helper",
             icon="https://i.imgur.com/fe4hpXD.png/-/scale_crop/200x200/center/",
-            markdown_description="Hello, im Datais AI, Im helping analyse data.",
+            markdown_description="Hello, im Datais AI, Im helping analyze data.",
             starters=[
                 cl.Starter(
                     label="How do you work?",
