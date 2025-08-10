@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from langchain_core.messages import SystemMessage,HumanMessage
+from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import MessagesState, StateGraph, START
 from langgraph.prebuilt import tools_condition, ToolNode
@@ -38,17 +38,11 @@ builder.add_conditional_edges(
 builder.add_edge('tools','assistant')
 
 memory = MemorySaver()
-react_graph = builder.compile(checkpointer=memory)
+graph = builder.compile(checkpointer=memory)
 
 config = {'configurable': {'thread_id': '123'}}
 
-query = [HumanMessage(content='give me deep analyz data/titanic.csv, data/description.json')]
-query = react_graph.invoke({'messages': query}, config)
-
-for m in query['messages']:
-    m.pretty_print()
-
 if __name__ == '__main__':
     with open("assets/graph_llm.png", "wb") as f:
-        f.write(react_graph.get_graph(xray=True).draw_mermaid_png())
+        f.write(graph.get_graph(xray=True).draw_mermaid_png())
     print('graph saved')

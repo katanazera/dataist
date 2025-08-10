@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "chainlit>=2.6.8",
     "graphviz>=0.21",
     "ipython>=9.4.0",
     "langchain>=0.3.27",
