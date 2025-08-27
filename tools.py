@@ -3,15 +3,48 @@ import prompts
 import warnings
 import numpy as np
 import pandas as pd
+import chainlit as cl
 from pydantic import BaseModel, Field
 from typing import Annotated, Optional
 from dotenv import load_dotenv
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain.chat_models import init_chat_model
+from langchain.tools import tool
+from langchain_experimental.utilities import PythonREPL
 
 
 load_dotenv()
 
+@tool("python_repl", return_direct=True)
+def python_repl_tool(code: str) -> str:
+    """
+    Executes Python code and returns results. ALWAYS use for calculations.
+    Input MUST be valid Python code. Examples:
+    - "(549 / 891) * 100"
+    - "import math; math.sqrt(225)"
+    - "print('Result:', 2**8)"
+    
+    NEVER try to compute manually! Always use this tool.
+    """
+    try:
+        #auto-print for last message
+        lines = [line.strip() for line in code.split('\n') if line.strip()]
+        if lines and not lines[-1].startswith(('print', 'import')):
+            last_line = lines[-1]
+            if '=' not in last_line:
+                code = '\n'.join(lines[:-1] + [f'print({last_line})'])
+        
+        result = PythonREPL().run(code)
+        
+        if not result.strip():
+            return "Error: No output. Did you forget 'print()'?"
+            
+        return f"Calculation Result:\n{result.strip()}"
+    
+    except Exception as e:
+        return f"Python REPL Error: {str(e)}"
+    
+'''
 def set_file_path_via_llm(user_message: str):
     """
     Extract the file path from the user's message. 
@@ -27,7 +60,7 @@ def set_file_path_via_llm(user_message: str):
     CSV_PATH = ''
 
     class FilePath(BaseModel):
-        '''Absolute file path from text'''
+        #Absolute file path from text
         file_path: Optional[str] = Field(
             default=None,
             description="Absolute file path from user's query example: 'D:/testdata/mydata/titanic.csv'"
@@ -57,9 +90,11 @@ def set_file_path_via_llm(user_message: str):
             file_description = json.load(f)
             return file_description
     return CSV_PATH
+'''
 
 def get_shape() -> str:
     """returns number of rows and columns in the dataset."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     return f"Dataset contains {df.shape[0]} rows and {df.shape[1]} columns."
@@ -67,6 +102,7 @@ def get_shape() -> str:
 
 def get_columns() -> str:
     """returns list of all column names."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     return f"Columns: {', '.join(df.columns)}"
@@ -74,7 +110,7 @@ def get_columns() -> str:
 
 def get_dtypes() -> str:
     """returns data types of all columns."""
-    df = set_file_path_via_llm()
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     return "Data types:\n" + df.dtypes.to_string()
@@ -82,6 +118,7 @@ def get_dtypes() -> str:
 
 def get_missing_values() -> str:
     """returns number of missing values per column."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     missing = df.isnull().sum()
@@ -92,6 +129,7 @@ def get_missing_values() -> str:
 
 def get_describe() -> str:
     """returns summary statistics of all numeric columns."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     return "Summary statistics:\n" + df.describe().to_string()
@@ -101,6 +139,7 @@ def get_column_unique_values(
     column: Annotated[str, "Name of the column"]
 ) -> str:
     """returns unique values in the specified column."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     if column not in df.columns:
@@ -113,6 +152,7 @@ def get_value_counts(
     column: Annotated[str, "Name of the column"]
 ) -> str:
     """returns value counts for the specified column."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     if column not in df.columns:
@@ -125,6 +165,7 @@ def get_numeric_summary(
     column: Annotated[str, "Name of a numeric column"]
 ) -> str:
     """returns summary statistics for a specific numeric column."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     if column not in df.columns:
@@ -136,6 +177,7 @@ def get_numeric_summary(
 
 def get_column_nunique() -> str:
     """returns number of unique values per column."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     return "Number of unique values per column:\n" + df.nunique().to_string()
@@ -143,6 +185,7 @@ def get_column_nunique() -> str:
 
 def get_numeric_correlation() -> str:
     """returns correlation matrix of numeric columns."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     corr = df.corr(numeric_only=True)
@@ -151,6 +194,7 @@ def get_numeric_correlation() -> str:
 
 def get_categorical_columns() -> str:
     """returns list of categorical (object) columns."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     cat_cols = df.select_dtypes(include='object').columns.tolist()
@@ -161,6 +205,7 @@ def get_top_values_each_column(
     n: Annotated[int, "Number of top values per column"]
 ) -> str:
     """returns top N most frequent values for each column."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     result = {}
@@ -174,6 +219,7 @@ def get_correlation_between_columns(
     col2: Annotated[str, "Second numeric column"]
 ) -> str:
     """returns Pearson correlation coefficient between two numeric columns."""
+    df = cl.user_session.get("dataframe")
     if df.empty:
         return "Dataset is empty or failed to load."
     if col1 not in df.columns or col2 not in df.columns:
@@ -189,7 +235,7 @@ def deep_data_analysis(file_path: str) -> str:
     use ONLY if user asks for 'deep research', 'insights', or 'find something interesting'.
     """
     try:
-        df = pd.read_csv(file_path)
+        df = cl.user_session.get("dataframe")
         insights = []
 
         #basic statistics
@@ -266,7 +312,8 @@ def deep_data_analysis(file_path: str) -> str:
         return f"Analysis failed: {str(e)}"
 
 tools = [
-    set_file_path_via_llm,
+    python_repl_tool,
+#    set_file_path_via_llm,
     get_shape,
     get_columns,
     get_dtypes,
