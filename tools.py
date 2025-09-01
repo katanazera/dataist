@@ -1,5 +1,5 @@
 import json
-import prompts
+from prompts import extractor_prompt
 import warnings
 import numpy as np
 import pandas as pd
@@ -74,7 +74,7 @@ def set_file_path_via_llm(user_message: str):
     structured_llm = llm.with_structured_output(schema=FilePath)
 
     result = structured_llm.invoke([
-        SystemMessage(content=prompts.EXTRACTOR_PROMPT),
+        SystemMessage(content=extractor_prompt()),
         HumanMessage(content=user_message)
     ])
 

@@ -1,12 +1,14 @@
 from dotenv import load_dotenv
 import chainlit as cl
+import json
+from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage, RemoveMessage, AIMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import MessagesState, StateGraph, START, END
 from langgraph.prebuilt import tools_condition,ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 from tools import tools
-import prompts
+from prompts import dataist_agent_prompt,fields_analyzer_prompt
 
 load_dotenv()
 
@@ -16,10 +18,64 @@ llm_with_tools = llm.bind_tools(tools)
 
 class State(MessagesState):
     summary: str
+    fields: dict | None
+
+def check_fields(state: State):
+    data = cl.user_session.get('dataframe')
+    fields = cl.user_session.get('fields')
+
+    if data is not None and not data.empty and not fields:
+        return 'analyze_fields'
     
+    return 'assistant'
+
+def analyze_fields(state: State):
+    df = cl.user_session.get('dataframe')
+
+    # Create prompt template
+    template = ChatPromptTemplate.from_messages([
+    ("system", fields_analyzer_prompt()),
+    
+    ("human", """Dataframe head:
+
+            {dataframe_head}
+
+            Rows: {rows_count}
+            Columns: {columns_count}
+
+            Analyze each column and return ONLY JSON with column descriptions.""")
+])
+    
+    #prepare data
+    dataframe_head = df.head().to_string()
+    rows_count = len(df)
+    columns_count = len(df.columns)
+    
+    #format prompt
+    prompt = template.format_messages(
+        dataframe_head=dataframe_head,
+        rows_count=rows_count,
+        columns_count=columns_count
+    )
+    
+    #get response from LLM
+    response = llm.invoke(prompt)
+    
+    #parse str type to dict
+    fields_dict = json.loads(response.content.strip())
+        
+    #save to state
+    state["fields"] = fields_dict
+    
+    #save to user session
+    cl.user_session.set("fields", fields_dict)
+    cl.user_session.set("should_send_file", True)
+
+    return {"fields": fields_dict}
+
 #building a system prompt
 def build_system_prompt(state: State) -> str:
-    sys_content = prompts.DATAIST_PROMPT
+    sys_content = dataist_agent_prompt()
 
     description = cl.user_session.get("fields")
     if description:
@@ -70,8 +126,8 @@ def summarize_text(state: State):
     respone = llm.invoke(messages)
 
     #filter messages to recent 2 messages
-    delete_messages = [RemoveMessage(id=m.id) for m in state['messages'][:-2]]
-    return {'summary': respone.content}
+    delete_messages = [RemoveMessage(id=m.id) for m in state['messages']]
+    return {'summary': respone.content,'messages':[]}
 
 #decides when we need to filter our messages history
 def should_continue(state: State):
@@ -101,8 +157,16 @@ builder = StateGraph(State)
 builder.add_node('assistant',assistant)
 builder.add_node('tools',ToolNode(tools))
 builder.add_node(summarize_text)
+builder.add_node('analyze_fields',analyze_fields)
 
-builder.add_edge(START, 'assistant')
+builder.add_conditional_edges(
+    START,
+    check_fields,
+    {
+        'analyze_fields': 'analyze_fields',
+        'assistant': 'assistant'
+    }
+)
 builder.add_conditional_edges(
     'assistant',
     tools_condition,
@@ -111,6 +175,7 @@ builder.add_conditional_edges(
         END:END
     }
 )
+builder.add_edge('analyze_fields','assistant')
 builder.add_conditional_edges(
     'assistant',
     should_continue,
